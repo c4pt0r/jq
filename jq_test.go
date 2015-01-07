@@ -1,6 +1,7 @@
 package jq
 
 import (
+	"bytes"
 	"runtime"
 	"sync"
 	"testing"
@@ -10,26 +11,33 @@ import (
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	log.SetLevelByString("warning")
+	log.SetLevelByString("info")
 }
 
-func MockWorker(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error) {
-	log.Info("on worker", input)
-	ret <- []byte("retVal1")
-	ret <- []byte("retVal2")
-	ret <- []byte("retVal3")
-	ret <- []byte("retVal4")
+func MockWorkerFunc(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error) {
+	ret <- []byte("world")
 	done <- struct{}{}
 }
 
 func TestEnqueue(t *testing.T) {
-	jq := NewJq("test_queue", MockWorker)
+	jq := NewJq("test_queue", MockWorkerFunc, nil)
+	jq.Submit([]byte("hello"), func(ret []byte) {
+		if !bytes.Equal(ret, []byte("world")) {
+			t.Error("error")
+		}
+	}, nil, true)
+}
+
+func TestCocurrentEnqueue(t *testing.T) {
+	jq := NewJq("test_queue", MockWorkerFunc, nil)
 	wg := sync.WaitGroup{}
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 1000; i++ {
 		wg.Add(1)
 		go func() {
 			jq.Submit([]byte("hello"), func(ret []byte) {
-				log.Info("on ret", string(ret))
+				if !bytes.Equal(ret, []byte("world")) {
+					t.Error("error")
+				}
 			}, nil, true)
 			wg.Done()
 		}()

@@ -7,42 +7,31 @@ import (
 	log "github.com/ngaut/logging"
 )
 
-type Worker interface {
-	Do([]byte) ([]byte, error)
-}
-
-type workerBroker struct {
-	w       Worker
-	jobChan chan Job
-}
-
-type MsgType int
-
-const (
-	MSG_RET MsgType = iota
-	MSG_DONE
-	MSG_ERR
-)
-
-type Msg struct {
-	Type MsgType `json:"type"`
-	Data []byte  `json:"data"`
-}
+type WorkerFunc func(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error)
 
 type Jq struct {
 	name       string
 	mgr        QueueManager
 	workerFunc WorkerFunc
+	opt        *JqOptions
 	waiting    chan *Job
 }
 
-type WorkerFunc func(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error)
+type JqOptions struct {
+	QueueCheckInterval time.Duration
+}
 
-func NewJq(name string, workerFunc WorkerFunc) *Jq {
+func NewJq(name string, workerFunc WorkerFunc, opt *JqOptions) *Jq {
+	if opt == nil {
+		opt = &JqOptions{
+			QueueCheckInterval: 100 * time.Millisecond,
+		}
+	}
 	mgr := MemQueueManagerFactory(MemQFactory)
 	jq := &Jq{
 		name:       name,
 		mgr:        mgr,
+		opt:        opt,
 		workerFunc: workerFunc,
 		waiting:    make(chan *Job),
 	}
@@ -76,7 +65,7 @@ func NewJq(name string, workerFunc WorkerFunc) *Jq {
 		for {
 			b, err := q.Pop()
 			if err == ErrEmpty {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(jq.opt.QueueCheckInterval)
 				continue
 			}
 			if err != nil {
@@ -108,6 +97,7 @@ func NewJq(name string, workerFunc WorkerFunc) *Jq {
 					errChan := make(chan error)
 					doneChan := make(chan struct{})
 					go workerFunc(job.Data, retChan, doneChan, errChan)
+					// wait for worker response
 					for {
 						var msg Msg
 						select {
@@ -165,7 +155,7 @@ func (jq *Jq) Submit(data []byte, onRet func([]byte), onErr func(error), sync bo
 		for {
 			b, err := q.Pop()
 			if err == ErrEmpty {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(jq.opt.QueueCheckInterval)
 				continue
 			}
 			if err != nil {

@@ -12,6 +12,19 @@ type Job struct {
 	onErr func(error)
 }
 
+type MsgType int
+
+const (
+	MSG_RET MsgType = iota
+	MSG_DONE
+	MSG_ERR
+)
+
+type Msg struct {
+	Type MsgType `json:"type"`
+	Data []byte  `json:"data"`
+}
+
 var globalId int32 = 1
 
 func genId() string {
