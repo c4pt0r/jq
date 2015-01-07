@@ -21,16 +21,15 @@ type JqOptions struct {
 	QueueCheckInterval time.Duration
 }
 
-func NewJq(name string, workerFunc WorkerFunc, opt *JqOptions) *Jq {
+func NewJq(name string, queueMgr QueueManager, workerFunc WorkerFunc, opt *JqOptions) *Jq {
 	if opt == nil {
 		opt = &JqOptions{
 			QueueCheckInterval: 100 * time.Millisecond,
 		}
 	}
-	mgr := MemQueueManagerFactory(MemQFactory)
 	jq := &Jq{
 		name:       name,
-		mgr:        mgr,
+		mgr:        queueMgr,
 		opt:        opt,
 		workerFunc: workerFunc,
 		waiting:    make(chan *Job),
@@ -38,7 +37,7 @@ func NewJq(name string, workerFunc WorkerFunc, opt *JqOptions) *Jq {
 
 	go func() {
 		for job := range jq.waiting {
-			q, err := mgr.Get(jq.name + "_waiting_jobs")
+			q, err := jq.mgr.Get(jq.name + "_waiting_jobs")
 			if err != nil {
 				continue
 			}

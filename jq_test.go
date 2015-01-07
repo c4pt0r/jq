@@ -20,7 +20,7 @@ func MockWorkerFunc(input []byte, ret chan<- []byte, done chan<- struct{}, err c
 }
 
 func TestEnqueue(t *testing.T) {
-	jq := NewJq("test_queue", MockWorkerFunc, nil)
+	jq := NewJq("test_queue", MemQueueManagerFactory(MemQFactory), MockWorkerFunc, nil)
 	jq.Submit([]byte("hello"), func(ret []byte) {
 		if !bytes.Equal(ret, []byte("world")) {
 			t.Error("error")
@@ -29,7 +29,7 @@ func TestEnqueue(t *testing.T) {
 }
 
 func TestCocurrentEnqueue(t *testing.T) {
-	jq := NewJq("test_queue", MockWorkerFunc, nil)
+	jq := NewJq("test_queue", MemQueueManagerFactory(MemQFactory), MockWorkerFunc, nil)
 	wg := sync.WaitGroup{}
 	for i := 0; i < 1000; i++ {
 		wg.Add(1)
