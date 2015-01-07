@@ -6,12 +6,19 @@ jq is a simple in-app job queue library in go
 usage:
 
 ```
-jq := NewJq("test_queue", func(input []byte, ret chan<- []byte, done chan <-struct{}, err chan<- error) {
-    done <- struct{}{}
-})
 
+func workerFunc(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error) {
+	ret <- []byte("world")
+	done <- struct{}{}
+}
 
-job := jq.Submit([]byte("job data"))
-
+func TestEnqueue(t *testing.T) {
+	jq := NewJq("test_queue", workerFunc, nil)
+	jq.Submit([]byte("hello"), func(ret []byte) {
+		if !bytes.Equal(ret, []byte("world")) {
+			t.Error("error")
+		}
+	}, nil, true)
+}
 
 ```
