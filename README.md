@@ -1,7 +1,9 @@
 jq
 ==
 
-jq is a simple in-app job queue library in go
+jq is a simple job queue library in Go.
+
+you can write your own backend queue & queue manager implementations to make jq a real distributed job queue :)
 
 `jq.NewJq(queueName, queueManager, workerFunc, options)`
 
