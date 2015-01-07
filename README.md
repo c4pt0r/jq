@@ -3,6 +3,8 @@ jq
 
 jq is a simple in-app job queue library in go
 
+`jq.Submit(bytes, onReturnValue, onError, isSync)`
+
 usage:
 
 ```
@@ -18,7 +20,9 @@ func TestEnqueue(t *testing.T) {
 		if !bytes.Equal(ret, []byte("world")) {
 			t.Error("error")
 		}
-	}, nil, true)
+	}, func(err error) {
+        // oops on error
+    }, true)
 }
 
 ```
