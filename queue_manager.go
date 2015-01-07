@@ -3,6 +3,7 @@ package jq
 import "sync"
 
 type QueueManager interface {
+	Exists(name string) (bool, error)
 	Get(name string) (Queue, error)
 	Del(name string) error
 }
@@ -27,6 +28,12 @@ func MemQueueManagerFactory(qfactory QueueFactory) *MemQueueManager {
 func (self *MemQueueManager) exists(name string) bool {
 	_, b := self.queues[name]
 	return b
+}
+
+func (self *MemQueueManager) Exists(name string) (bool, error) {
+	self.lck.Lock()
+	defer self.lck.Unlock()
+	return self.exists(name), nil
 }
 
 func (self *MemQueueManager) Get(name string) (Queue, error) {

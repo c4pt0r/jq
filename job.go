@@ -6,11 +6,10 @@ import (
 )
 
 type Job struct {
-	Id      string        `json:"id"`
-	Data    []byte        `json:"data"`
-	RetChan chan []byte   `json:"-"`
-	Done    chan struct{} `json:"-"`
-	ErrChan chan error    `json:"-"`
+	Id    string `json:"id"`
+	Data  []byte `json:"data"`
+	onRet func([]byte)
+	onErr func(error)
 }
 
 var globalId int32 = 1

@@ -10,7 +10,7 @@ import (
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	log.SetLevelByString("info")
+	log.SetLevelByString("warning")
 }
 
 func MockWorker(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error) {
@@ -25,23 +25,12 @@ func MockWorker(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<
 func TestEnqueue(t *testing.T) {
 	jq := NewJq("test_queue", MockWorker)
 	wg := sync.WaitGroup{}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 100000; i++ {
 		wg.Add(1)
 		go func() {
-			job := jq.Submit([]byte("hello"))
-		L:
-			for {
-				select {
-				case r := <-job.RetChan:
-					log.Info("ret", job.Id, string(r))
-				case err := <-job.ErrChan:
-					log.Info("err", job.Id, err)
-					break L
-				case <-job.Done:
-					log.Info("done")
-					break L
-				}
-			}
+			jq.Submit([]byte("hello"), func(ret []byte) {
+				log.Info("on ret", string(ret))
+			}, nil, true)
 			wg.Done()
 		}()
 	}
