@@ -1,10 +1,16 @@
 package jq
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
+
+var ErrNotExists = errors.New("queue not exists")
 
 type QueueManager interface {
 	Exists(name string) (bool, error)
 	Get(name string) (Queue, error)
+	GetOrCreate(name string) (Queue, error)
 	Del(name string) error
 }
 
@@ -36,7 +42,7 @@ func (self *MemQueueManager) Exists(name string) (bool, error) {
 	return self.exists(name), nil
 }
 
-func (self *MemQueueManager) Get(name string) (Queue, error) {
+func (self *MemQueueManager) GetOrCreate(name string) (Queue, error) {
 	self.lck.Lock()
 	defer self.lck.Unlock()
 
@@ -44,6 +50,17 @@ func (self *MemQueueManager) Get(name string) (Queue, error) {
 		self.queues[name] = self.qfactory(name)
 	}
 	return self.queues[name], nil
+}
+
+func (self *MemQueueManager) Get(name string) (Queue, error) {
+	self.lck.Lock()
+	defer self.lck.Unlock()
+
+	v, ok := self.queues[name]
+	if !ok {
+		return nil, ErrNotExists
+	}
+	return v, nil
 }
 
 func (self *MemQueueManager) Del(name string) error {

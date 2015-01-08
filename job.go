@@ -1,15 +1,20 @@
 package jq
 
 import (
+	"errors"
 	"strconv"
 	"sync/atomic"
+	"time"
 )
 
+var ErrTimeout = errors.New("timeout")
+
 type Job struct {
-	Id    string `json:"id"`
-	Data  []byte `json:"data"`
-	onRet func([]byte)
-	onErr func(error)
+	Id      string        `json:"id"`
+	Data    []byte        `json:"data"`
+	Timeout time.Duration `json:"timeout"`
+	onRet   func([]byte)
+	onErr   func(error)
 }
 
 type MsgType int
