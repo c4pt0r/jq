@@ -26,6 +26,7 @@ type MemQ struct {
 func (q *MemQ) Push(v []byte) error {
 	q.lck.Lock()
 	defer q.lck.Unlock()
+
 	q.lst.PushBack(v)
 	return nil
 }
@@ -45,7 +46,7 @@ func (q *MemQ) Pop() ([]byte, error) {
 
 func (q *MemQ) Len() int {
 	q.lck.Lock()
-	q.lck.Unlock()
+	defer q.lck.Unlock()
 	return q.lst.Len()
 }
 

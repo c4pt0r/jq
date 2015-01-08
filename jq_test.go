@@ -36,7 +36,6 @@ func TestEnqueueWithTimeout(t *testing.T) {
 		ret <- []byte("world")
 		done <- struct{}{}
 	}, nil)
-
 	go jq.DispatchForever()
 	jq.SubmitWithTimeout([]byte("hello"), 500*time.Microsecond, nil, func(err error) {
 		log.Info(err)
