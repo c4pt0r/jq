@@ -10,16 +10,22 @@ import (
 type WorkerFunc func(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error)
 
 type Jq struct {
-	name    string
-	mgr     QueueManager
-	opt     JqOptions
-	workers []*workerWrapper
-	waiting chan *Job
+	name            string
+	mgr             QueueManager
+	opt             JqOptions
+	workerParamChan chan workerParam
+	workers         []*workerWrapper
+	waiting         chan *Job
 }
 
 type JqOptions struct {
 	QueueCheckInterval time.Duration
 	CocurrentWorkerNum int
+}
+
+var DefaultOpt = JqOptions{
+	CocurrentWorkerNum: 10000,
+	QueueCheckInterval: 100 * time.Millisecond,
 }
 
 type workerParam struct {
@@ -37,8 +43,8 @@ type workerWrapper struct {
 }
 
 func (w *workerWrapper) Close() {
-	w.stop <- struct{}{}
 	close(w.c)
+	w.stop <- struct{}{}
 }
 
 func (w *workerWrapper) run() {
@@ -76,19 +82,14 @@ func (w *workerWrapper) run() {
 	}
 }
 
-func newWorkerWrapper(workerFunc WorkerFunc) *workerWrapper {
+func newWorkerWrapper(workerFunc WorkerFunc, paramChan chan workerParam) *workerWrapper {
 	ret := &workerWrapper{
 		workerFunc: workerFunc,
-		c:          make(chan workerParam),
+		c:          paramChan,
 		stop:       make(chan struct{}),
 	}
 	go ret.run()
 	return ret
-}
-
-var DefaultOpt = JqOptions{
-	CocurrentWorkerNum: 100,
-	QueueCheckInterval: 100 * time.Millisecond,
 }
 
 func NewJq(name string, queueMgr QueueManager, workerFunc WorkerFunc) *Jq {
@@ -97,14 +98,15 @@ func NewJq(name string, queueMgr QueueManager, workerFunc WorkerFunc) *Jq {
 
 func NewJqWithOpt(name string, queueMgr QueueManager, workerFunc WorkerFunc, opt JqOptions) *Jq {
 	jq := &Jq{
-		name:    name,
-		mgr:     queueMgr,
-		opt:     opt,
-		waiting: make(chan *Job),
+		name:            name,
+		mgr:             queueMgr,
+		opt:             opt,
+		workerParamChan: make(chan workerParam),
+		waiting:         make(chan *Job),
 	}
 
 	for i := 0; i < jq.opt.CocurrentWorkerNum; i++ {
-		jq.workers = append(jq.workers, newWorkerWrapper(workerFunc))
+		jq.workers = append(jq.workers, newWorkerWrapper(workerFunc, jq.workerParamChan))
 	}
 
 	go jq.enqueueLoop()
@@ -162,22 +164,12 @@ func (jq *Jq) DispatchForever() {
 		}
 
 		// try post job to worker
-		i := 0
-		param := workerParam{
+		jq.workerParamChan <- workerParam{
 			job:       job,
 			respQueue: respq,
 			err:       make(chan error),
 			done:      make(chan struct{}),
 			ret:       make(chan []byte),
-		}
-	L:
-		for {
-			select {
-			case jq.workers[i].c <- param:
-				break L
-			default:
-				i = (i + 1) % jq.opt.CocurrentWorkerNum
-			}
 		}
 	}
 }

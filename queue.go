@@ -26,7 +26,6 @@ type MemQ struct {
 func (q *MemQ) Push(v []byte) error {
 	q.lck.Lock()
 	defer q.lck.Unlock()
-
 	q.lst.PushBack(v)
 	return nil
 }
@@ -38,7 +37,6 @@ func (q *MemQ) Pop() ([]byte, error) {
 	if q.lst.Len() == 0 {
 		return nil, ErrEmpty
 	}
-
 	v := q.lst.Front()
 	q.lst.Remove(v)
 	return v.Value.([]byte), nil
