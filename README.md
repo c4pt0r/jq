@@ -15,6 +15,8 @@ usage:
 
 func workerFunc(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error) {
 	ret <- []byte("world")
+	ret <- []byte("world")
+	ret <- []byte("world")
 	done <- struct{}{}
 }
 
