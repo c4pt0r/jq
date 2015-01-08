@@ -20,6 +20,7 @@ func workerFunc(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<
 
 func TestEnqueue(t *testing.T) {
 	jq := NewJq("test_queue", MemQueueManagerFactory(MemQFactory), MockWorkerFunc, nil)
+	go jq.DispatchForever()
 	jq.Submit([]byte("hello"), func(ret []byte) {
 		if !bytes.Equal(ret, []byte("world")) {
 			t.Error("error")
