@@ -21,7 +21,7 @@ func MockWorkerFunc(input []byte, ret chan<- []byte, done chan<- struct{}, err c
 }
 
 func TestEnqueue(t *testing.T) {
-	jq := NewJq("test_queue", MemQueueManagerFactory(MemQFactory), MockWorkerFunc, nil)
+	jq := NewJq("test_queue1", MemQueueManagerFactory(MemQFactory), MockWorkerFunc)
 	go jq.DispatchForever()
 	jq.Submit([]byte("hello"), func(ret []byte) {
 		if !bytes.Equal(ret, []byte("world")) {
@@ -31,11 +31,11 @@ func TestEnqueue(t *testing.T) {
 }
 
 func TestEnqueueWithTimeout(t *testing.T) {
-	jq := NewJq("test_queue", MemQueueManagerFactory(MemQFactory), func(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error) {
+	jq := NewJq("test_queue2", MemQueueManagerFactory(MemQFactory), func(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error) {
 		time.Sleep(1 * time.Second)
 		ret <- []byte("world")
 		done <- struct{}{}
-	}, nil)
+	})
 	go jq.DispatchForever()
 	jq.SubmitWithTimeout([]byte("hello"), 500*time.Microsecond, nil, func(err error) {
 		log.Info(err)
@@ -56,7 +56,7 @@ func TestEnqueueWithTimeout(t *testing.T) {
 }
 
 func TestCocurrentEnqueue(t *testing.T) {
-	jq := NewJq("test_queue", MemQueueManagerFactory(MemQFactory), MockWorkerFunc, nil)
+	jq := NewJq("test_queue3", MemQueueManagerFactory(MemQFactory), MockWorkerFunc)
 	go jq.DispatchForever()
 	wg := sync.WaitGroup{}
 	for i := 0; i < 100000; i++ {

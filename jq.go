@@ -10,29 +10,101 @@ import (
 type WorkerFunc func(input []byte, ret chan<- []byte, done chan<- struct{}, err chan<- error)
 
 type Jq struct {
-	name       string
-	mgr        QueueManager
-	workerFunc WorkerFunc
-	opt        *JqOptions
-	waiting    chan *Job
+	name    string
+	mgr     QueueManager
+	opt     JqOptions
+	workers []*workerWrapper
+	waiting chan *Job
 }
 
 type JqOptions struct {
 	QueueCheckInterval time.Duration
+	CocurrentWorkerNum int
 }
 
-func NewJq(name string, queueMgr QueueManager, workerFunc WorkerFunc, opt *JqOptions) *Jq {
-	if opt == nil {
-		opt = &JqOptions{
-			QueueCheckInterval: 100 * time.Millisecond,
+type workerParam struct {
+	job       Job
+	respQueue Queue
+	ret       chan []byte
+	done      chan struct{}
+	err       chan error
+}
+
+type workerWrapper struct {
+	workerFunc WorkerFunc
+	c          chan workerParam
+	stop       chan struct{}
+}
+
+func (w *workerWrapper) Close() {
+	w.stop <- struct{}{}
+	close(w.c)
+}
+
+func (w *workerWrapper) run() {
+	for {
+		select {
+		case param := <-w.c:
+			go w.workerFunc(param.job.Data, param.ret, param.done, param.err)
+			for {
+				var msg Msg
+				select {
+				case b := <-param.ret:
+					msg.Type = MSG_RET
+					msg.Data = b
+				case err := <-param.err:
+					msg.Type = MSG_ERR
+					msg.Data = []byte(err.Error())
+				case <-param.done:
+					msg.Type = MSG_DONE
+				}
+				b, _ := json.Marshal(msg)
+				err := param.respQueue.Push(b)
+				// this queue maybe had destroied
+				if err != nil {
+					log.Error(err)
+					break
+				}
+				// finish
+				if msg.Type == MSG_ERR || msg.Type == MSG_DONE {
+					break
+				}
+			}
+		case <-w.stop:
+			break
 		}
 	}
-	jq := &Jq{
-		name:       name,
-		mgr:        queueMgr,
-		opt:        opt,
+}
+
+func newWorkerWrapper(workerFunc WorkerFunc) *workerWrapper {
+	ret := &workerWrapper{
 		workerFunc: workerFunc,
-		waiting:    make(chan *Job),
+		c:          make(chan workerParam),
+		stop:       make(chan struct{}),
+	}
+	go ret.run()
+	return ret
+}
+
+var DefaultOpt = JqOptions{
+	CocurrentWorkerNum: 100,
+	QueueCheckInterval: 100 * time.Millisecond,
+}
+
+func NewJq(name string, queueMgr QueueManager, workerFunc WorkerFunc) *Jq {
+	return NewJqWithOpt(name, queueMgr, workerFunc, DefaultOpt)
+}
+
+func NewJqWithOpt(name string, queueMgr QueueManager, workerFunc WorkerFunc, opt JqOptions) *Jq {
+	jq := &Jq{
+		name:    name,
+		mgr:     queueMgr,
+		opt:     opt,
+		waiting: make(chan *Job),
+	}
+
+	for i := 0; i < jq.opt.CocurrentWorkerNum; i++ {
+		jq.workers = append(jq.workers, newWorkerWrapper(workerFunc))
 	}
 
 	go jq.enqueueLoop()
@@ -80,57 +152,34 @@ func (jq *Jq) DispatchForever() {
 			log.Error(err)
 			continue
 		}
-		// TODO: use a pool
-		if jq.workerFunc != nil {
-			go jq.doJob(job)
-		}
-	}
-}
 
-func (jq *Jq) doJob(job Job) {
-	retQueueName := jq.name + "_job_" + job.Id
-	if b, _ := jq.mgr.Exists(retQueueName); !b {
-		log.Warning("return channel not ready, ignore this job")
-		return
-	}
-	retq, err := jq.mgr.Get(retQueueName)
-	if err != nil {
-		log.Warning("get return channel error, ignore this job")
-		return
-	}
-	retChan := make(chan []byte)
-	errChan := make(chan error)
-	doneChan := make(chan struct{})
-	go jq.workerFunc(job.Data, retChan, doneChan, errChan)
-	// wait for worker response
-	for {
-		var msg Msg
-		select {
-		case b := <-retChan:
-			msg.Type = MSG_RET
-			msg.Data = b
-		case err := <-errChan:
-			msg.Type = MSG_ERR
-			msg.Data = []byte(err.Error())
-		case <-doneChan:
-			msg.Type = MSG_DONE
-		}
-		b, _ := json.Marshal(msg)
-		err = retq.Push(b)
-		// this queue maybe had destroied
+		// check response channel
+		qname := jq.name + "_job_" + job.Id
+		respq, err := jq.mgr.Get(qname)
 		if err != nil {
-			log.Error(err)
-			break
+			log.Warning("get return channel error, ignore this job")
+			continue
 		}
-		// finish
-		if msg.Type == MSG_ERR || msg.Type == MSG_DONE {
-			break
+
+		// try post job to worker
+		i := 0
+		param := workerParam{
+			job:       job,
+			respQueue: respq,
+			err:       make(chan error),
+			done:      make(chan struct{}),
+			ret:       make(chan []byte),
+		}
+	L:
+		for {
+			select {
+			case jq.workers[i].c <- param:
+				break L
+			default:
+				i = (i + 1) % jq.opt.CocurrentWorkerNum
+			}
 		}
 	}
-}
-
-func (jq *Jq) Submit(data []byte, onRet func([]byte), onErr func(error), sync bool) {
-	jq.SubmitWithTimeout(data, 0, onRet, onErr, sync)
 }
 
 func (jq *Jq) waitForResponse(job *Job, respQueue Queue) {
@@ -214,4 +263,8 @@ func (jq *Jq) SubmitWithTimeout(data []byte, timeout time.Duration, onRet func([
 	} else {
 		go jq.waitForResponse(job, q)
 	}
+}
+
+func (jq *Jq) Submit(data []byte, onRet func([]byte), onErr func(error), sync bool) {
+	jq.SubmitWithTimeout(data, 0, onRet, onErr, sync)
 }
