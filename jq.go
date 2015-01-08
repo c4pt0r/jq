@@ -96,6 +96,10 @@ func NewJq(name string, queueMgr QueueManager, workerFunc WorkerFunc) *Jq {
 	return NewJqWithOpt(name, queueMgr, workerFunc, DefaultOpt)
 }
 
+func NewMemJq(name string, workerFunc WorkerFunc) *Jq {
+	return NewJqWithOpt(name, MemQueueManagerFactory(MemQFactory), workerFunc, DefaultOpt)
+}
+
 func NewJqWithOpt(name string, queueMgr QueueManager, workerFunc WorkerFunc, opt JqOptions) *Jq {
 	jq := &Jq{
 		name:            name,
