@@ -163,7 +163,7 @@ func (jq *Jq) DispatchForever() {
 		qname := jq.name + "_job_" + job.Id
 		respq, err := jq.mgr.Get(qname)
 		if err != nil {
-			log.Warning("get return channel error, ignore this job")
+			log.Warning(err, "get return channel error, ignore this job")
 			continue
 		}
 
